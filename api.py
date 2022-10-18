@@ -71,7 +71,7 @@ log.setLevel(logging.DEBUG)'''
 # --------------------------------------------------------------------------- #
 # configuration form structure
 # --------------------------------------------------------------------------- #
-class RegistrationForm(Form):
+class ModbusConfigs(Form):
     #Opens json file to extract last submitted values
     ip = StringField('IP', [validators.Length(min=0, max=15)])
     port = StringField('Port', [validators.Length(min=0, max=6)])
@@ -508,9 +508,9 @@ def hello():
             return redirect(url_for('hello'))
         elif request.form['action'] == 'Configuration':
             if mode == TCP_TO_SERIAL:
-                return redirect(url_for('config'))
+                return redirect(url_for('tcp_to_serial'))
             elif mode == SERIAL_TO_TCP:
-                return redirect(url_for('config'))
+                return redirect(url_for('serial_to_tcp'))
             elif mode == TCP_TO_OPC:
                 return redirect(url_for('tcp_to_opc'))
             elif mode == OPC_TO_TCP:
@@ -520,12 +520,12 @@ def hello():
 # --------------------------------------------------------------------------- #
 # modbus TCP to modbus serial configuration page
 # --------------------------------------------------------------------------- #
-@app.route('/config', methods=['GET', 'POST'])
-def config():
+@app.route('/tcp_to_serial', methods=['GET', 'POST'])
+def tcp_to_serial():
     global restart
     with open('config/TCP_to_Serial.json', 'r') as openfile:
         lastConfig = json.load(openfile)
-    form = RegistrationForm(request.form, ip=lastConfig['ip'], port=str(lastConfig['port']), 
+    form = ModbusConfigs(request.form, ip=lastConfig['ip'], port=str(lastConfig['port']), 
             serial_port=lastConfig['serial_port'], baudrate=str(lastConfig['baudrate']), parity=lastConfig['parity'], 
             bytesize=str(lastConfig['bytesize']), stopbits=str(lastConfig['stopbits']))
     if request.method == 'POST' and form.validate():
@@ -543,7 +543,7 @@ def config():
             gw_config = json.dumps(payload)
             with open("config/TCP_to_Serial.json", "w") as outfile:
                 outfile.write(gw_config)
-            return redirect(url_for('config'))
+            return redirect(url_for('tcp_to_serial'))
 
         elif request.form['action'] == 'Reset':
             restart = 1
@@ -552,7 +552,44 @@ def config():
         elif request.form['action'] == 'Back':
             return redirect(url_for('hello'))
 
-    return render_template('config.html', form=form)
+    return render_template('tcp_to_serial.html', form=form)
+
+# --------------------------------------------------------------------------- #
+# modbus serial to modbus tcp configuration page
+# --------------------------------------------------------------------------- #
+@app.route('/serial_to_tcp', methods=['GET', 'POST'])
+def serial_to_tcp():
+    global restart
+    with open('config/Serial_to_TCP.json', 'r') as openfile:
+        lastConfig = json.load(openfile)
+    form = ModbusConfigs(request.form, ip=lastConfig['ip'], port=str(lastConfig['port']), 
+            serial_port=lastConfig['serial_port'], baudrate=str(lastConfig['baudrate']), parity=lastConfig['parity'], 
+            bytesize=str(lastConfig['bytesize']), stopbits=str(lastConfig['stopbits']))
+    if request.method == 'POST' and form.validate():
+        if request.form['action'] == 'Apply':
+            ip = form.ip.data
+            port = int(form.port.data)
+            serial_port = form.serial_port.data
+            baudrate = int(form.baudrate.data)
+            bytesize = int(form.bytesize.data)
+            parity = form.parity.data
+            stopbits = int(form.stopbits.data)
+
+            payload = {'ip': ip, 'port': port, 'serial_port': serial_port, 'baudrate': baudrate, 
+                        'bytesize': bytesize, 'parity': parity, 'stopbits': stopbits}
+            gw_config = json.dumps(payload)
+            with open("config/Serial_to_TCP.json", "w") as outfile:
+                outfile.write(gw_config)
+            return redirect(url_for('serial_to_tcp'))
+
+        elif request.form['action'] == 'Reset':
+            restart = 1
+            return redirect(url_for('hello'))
+            
+        elif request.form['action'] == 'Back':
+            return redirect(url_for('hello'))
+
+    return render_template('serial_to_tcp.html', form=form)
 
 # --------------------------------------------------------------------------- #
 # modbus TCP to OPC UA configuration page
@@ -562,7 +599,7 @@ def tcp_to_opc():
     global restart
     if request.method == 'POST':
         if request.form['action'] == 'Add Tag':
-            return redirect(url_for('new'))
+            return redirect(url_for('new_tcp_to_opc_tag'))
         elif request.form['action'] == 'Delete Tag':
             tag_id = request.form['tagID']
             obj = TCP_to_OPC_Tags.query.filter_by(id=int(tag_id)).one()
@@ -578,7 +615,7 @@ def tcp_to_opc():
         elif request.form['action'] == 'Reset':
             restart = 1
             return redirect(url_for('hello'))
-    return render_template('show_all.html', tags = TCP_to_OPC_Tags.query.all() )
+    return render_template('tcp_to_opc.html', tags = TCP_to_OPC_Tags.query.all() )
 
 # --------------------------------------------------------------------------- #
 # OPC UA to modbus TCP configuration page
@@ -610,7 +647,7 @@ def opc_to_tcp():
 # modbus TCP to OPC UA tag creation page
 # --------------------------------------------------------------------------- #
 @app.route('/new_tcp_to_opc_tag', methods = ['GET', 'POST'])
-def new():
+def new_tcp_to_opc_tag():
     if request.method == 'POST':
         tag = TCP_to_OPC_Tags(request.form['name'], request.form['register'],
             request.form['var_type'], request.form['opc_object'])
@@ -618,7 +655,7 @@ def new():
         db.session.add(tag)
         db.session.commit()
         return redirect(url_for('tcp_to_opc'))
-    return render_template('new.html')
+    return render_template('new_tcp_to_opc_tag.html')
 
 # --------------------------------------------------------------------------- #
 # OPC UA to modbus TCP tag creation page

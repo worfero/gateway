@@ -1,0 +1,47 @@
+{% from "_formhelpers.html" import render_field %}
+<style>
+  /* Style the header */
+  header {
+    background-color: #D3D3D3;
+    padding: 10px;
+    padding-left: 50px;
+    padding-right: 50px;
+    text-align: center;
+    font-size: 25px;
+    color: black;
+  }
+</style>
+
+<header>
+  <h2>Modbus TCP to Modbus Serial Configuration</h2>
+</header>
+
+<div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
+  <form method=post action="">
+    <dl>
+      {{ render_field(form.ip) }}
+    </dl>
+    <dl>
+      {{ render_field(form.port) }}
+    </dl>
+    <dl>
+      {{ render_field(form.serial_port) }}
+    </dl>
+    <dl>
+      {{ render_field(form.baudrate) }}
+    </dl>
+    <dl>
+      {{ render_field(form.parity) }}
+    </dl>
+    <dl>
+      {{ render_field(form.bytesize) }}
+    </dl>
+    <dl>
+      {{ render_field(form.stopbits) }}
+    </dl>
+    <p><input type=submit name="action" value='Apply'></p>
+    <p><input type=submit name="action" value="Reset"></p>
+    <p><input type=submit name="action" value="Back"></p>
+  </form>
+  <p style="color: red;">Configuration parameters will only be applied after reset</p>
+</div>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+   <body>
+      <div style="text-align: center; background-color: #F5F5F5; padding: 10px;"></div>
+         <h3>Tags</h3>
+         <hr/>
+         
+         {%- for category, message in get_flashed_messages(with_categories = true) %}
+            <div class = "alert alert-danger">
+               {{ message }}
+            </div>
+         {%- endfor %}
+         
+         <form action = "{{ request.path }}" method = "post">
+            <label for = "name">Name</label><br>
+            <input type = "text" name = "name" placeholder = "Name" /><br>
+            <label for = "register">Register</label><br>
+            <input type = "text" name = "register" placeholder = "Register" /><br>
+            <label for = "var_type">Variable Type</label><br>
+            <select name="var_type">
+               <option value="int">int</option>
+               <option value="float">float</option>
+               <option value="bit">bit</option>
+            </select><br><br>
+            <label for = "opc_object">OPC Object</label><br>
+            <textarea name = "opc_object" placeholder = "opc_object"></textarea><br>
+            <input type = "submit" value = "Submit" />
+         </form>
+      </div>
+   </body>
+</html>

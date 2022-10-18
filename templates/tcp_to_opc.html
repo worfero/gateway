@@ -20,16 +20,16 @@
       </style>
    </head>
    <body>
-      <div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
-         {%- for message in get_flashed_messages() %}
-            {{ message }}
-         {%- endfor %}
+      {%- for message in get_flashed_messages() %}
+         {{ message }}
+      {%- endfor %}
+		<div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
          <h2>Tags</h2>
          <form method=post action="">
             <p><input type=submit name="action" value='Add Tag'></p>
             <p><input type=submit name="action" value="Reset"></p>
          </form>
-         <div style="padding-left: 200px; padding-right: 200px;">
+         <div style="padding-left: 150px; padding-right: 150px;">
             <table>
                <thead>
                   <tr>
@@ -38,8 +38,6 @@
                      <th>Register</th>
                      <th>Var Type</th>
                      <th>OPC Object</th>
-                     <th>Slave IP</th>
-                     <th>Unit ID</th>
                   </tr>
                </thead>
                
@@ -51,8 +49,6 @@
                         <td>{{ tag.register }}</td>
                         <td>{{ tag.var_type }}</td>
                         <td>{{ tag.opc_object }}</td>
-                        <td>{{ tag.slave_ip }}</td>
-                        <td>{{ tag.unit_id }}</td>
                      </tr>
                   {% endfor %}
                </tbody>
