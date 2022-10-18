@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang = "en">
+   <head>
+      <style>
+         table {
+            font-family: arial, sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+         }
+         
+         td, th {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+         }
+         
+         tr:nth-child(even) {
+            background-color: #dddddd;
+         }
+      </style>
+   </head>
+   <body>
+      <div style="background-color: #F5F5F5; padding: 10px;"></div>
+         {%- for message in get_flashed_messages() %}
+            {{ message }}
+         {%- endfor %}
+         <h3>Tags</h3>
+         <form method=post action="">
+            <p><input type=submit name="action" value='Add Tag'></p>
+            <p><input type=submit name="action" value="Reset"></p>
+         </form>
+      </div>
+      <table>
+         <thead>
+            <tr>
+               <th>ID</th>
+               <th>Name</th>
+               <th>Register</th>
+               <th>Var Type</th>
+               <th>OPC Object</th>
+               <th>Slave IP</th>
+               <th>Unit ID</th>
+            </tr>
+         </thead>
+         
+         <tbody>
+            {% for tag in tags %}
+               <tr>
+                  <td>{{ tag.id }}</td>
+                  <td>{{ tag.name }}</td>
+                  <td>{{ tag.register }}</td>
+                  <td>{{ tag.var_type }}</td>
+                  <td>{{ tag.opc_object }}</td>
+                  <td>{{ tag.slave_ip }}</td>
+                  <td>{{ tag.unit_id }}</td>
+               </tr>
+            {% endfor %}
+         </tbody>
+      </table>
+      <hr/>
+      <div style="background-color: #F5F5F5; padding: 10px;"></div>
+         <h2>Delete Tags</h2>
+         <form method=post action="">
+            <label>Tag ID</label><br>
+            <input type = "text" name = "tagID" placeholder = "Tag ID" /><br>
+            <p><input type=submit name="action" value='Delete Tag'></p>
+            <p><input type=submit name="action" value='Delete All'></p>
+         </form>
+      </div>
+   </body>
+</html>

@@ -1,0 +1,28 @@
+{% from "_formhelpers.html" import render_field %}
+
+<style>
+  /* Style the header */
+  header {
+    background-color: #D3D3D3;
+    padding: 10px;
+    padding-left: 50px;
+    padding-right: 50px;
+    text-align: center;
+    font-size: 25px;
+    color: black;
+  }
+</style>
+
+<header>
+  <h2>Gateway</h2>
+</header>
+<div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
+  <form method=post action="">
+    <dl display="inline-block;">
+      {{ render_field(form.mode) }}
+    </dl>
+    <p><input type=submit name="action" value="Apply"></p>
+    <p><input type=submit name="action" value="Reset"></p>
+    <p><input type=submit name="action" value="Configuration"></p>
+  </form>
+</div>
