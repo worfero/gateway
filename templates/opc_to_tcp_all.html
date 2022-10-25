@@ -2,6 +2,15 @@
 <html lang = "en">
    <head>
       <style>
+         header {
+            background-color: #D3D3D3;
+            padding: 10px;
+            padding-left: 50px;
+            padding-right: 50px;
+            text-align: center;
+            font-size: 25px;
+            color: black;
+         }
          table {
             font-family: arial, sans-serif;
             border-collapse: collapse;
@@ -20,14 +29,17 @@
       </style>
    </head>
    <body>
+      <header>
+         <h2>OPC UA to Modbus TCP Configuration</h2>
+      </header>
       <div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
          {%- for message in get_flashed_messages() %}
             {{ message }}
          {%- endfor %}
-         <h2>Tags</h2>
          <form method=post action="">
             <p><input type=submit name="action" value='Add Tag'></p>
             <p><input type=submit name="action" value="Reset"></p>
+            <p><input type=submit name="action" value="Back"></p>
          </form>
          <div style="padding-left: 200px; padding-right: 200px;">
             <table>

@@ -1,8 +1,9 @@
 <!DOCTYPE html>
+{% from "_formhelpers.html" import render_field %}
 <html>
    <body>
-      <div style="text-align: center; background-color: #F5F5F5; padding: 10px;"></div>
-         <h3>Tags</h3>
+      <div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
+         <h2>New TCP to OPC UA Tag</h2>
          <hr/>
          
          {%- for category, message in get_flashed_messages(with_categories = true) %}
@@ -11,19 +12,19 @@
             </div>
          {%- endfor %}
          
-         <form action = "{{ request.path }}" method = "post">
-            <label for = "name">Name</label><br>
-            <input type = "text" name = "name" placeholder = "Name" /><br>
-            <label for = "register">Register</label><br>
-            <input type = "text" name = "register" placeholder = "Register" /><br>
-            <label for = "var_type">Variable Type</label><br>
-            <select name="var_type">
-               <option value="int">int</option>
-               <option value="float">float</option>
-               <option value="bit">bit</option>
-            </select><br><br>
-            <label for = "opc_object">OPC Object</label><br>
-            <textarea name = "opc_object" placeholder = "opc_object"></textarea><br>
+         <form action = "" method = "post">
+            <dl>
+               {{ render_field(form.name) }}
+            </dl>
+            <dl>
+               {{ render_field(form.register) }}
+            </dl>
+            <dl>
+               {{ render_field(form.var_type) }}
+            </dl>
+            <dl>
+               {{ render_field(form.opc_object) }}
+            </dl>
             <input type = "submit" value = "Submit" />
          </form>
       </div>

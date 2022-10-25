@@ -1,12 +1,6 @@
-# --------------------------------------------------------------------------- #
-# import the various server implementations
-# --------------------------------------------------------------------------- #
 from pymodbus.version import version
-
 from pymodbus.server.asynchronous import StartTcpServer, StartSerialServer
-from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.datastore import ModbusSequentialDataBlock
-from pymodbus.transaction import ModbusSocketFramer as ModbusFramer
 from pymodbus.transaction import ModbusRtuFramer
 from pymodbus.datastore.remote import RemoteSlaveContext
 from pymodbus.datastore import ModbusSlaveContext, ModbusServerContext
@@ -16,41 +10,34 @@ from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.payload import BinaryPayloadBuilder
 
+from opcua import ua, Client, Server
+
+from wtforms import Form, BooleanField, StringField, PasswordField, SelectField, validators
+
+from flask import Flask, request, render_template, url_for, redirect
+from flask_restful import Api, Resource, reqparse, marshal, fields
+from flask_sqlalchemy import SQLAlchemy
+from multiprocessing import Process
+
+import multiprocessing
 import logging
 import requests
 import threading
 import json
 import os
 import sys
-import enum
 import time
-import asyncio
 import subprocess
-import multiprocessing
-from opcua import ua, Client, Server
 import time
 import datetime
+
 sys.path.insert(0, "..")
-
-from twisted.internet.task import LoopingCall
-from twisted.internet import reactor
-from flask_sqlalchemy import SQLAlchemy
-
-from wtforms import Form, BooleanField, StringField, PasswordField, SelectField, validators
-
-from multiprocessing import Queue, Process
-
-from flask import Flask, request, render_template, url_for, redirect
-from flask_restful import Api, Resource, reqparse, marshal, fields
 
 # from pymodbus.transaction import ModbusRtuFramer, ModbusBinaryFramer
 
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
-
-#logging level
-#LOG_LEVEL = logging.INFO #DEBUG
 
 #modes
 TCP_TO_SERIAL = 0
@@ -59,20 +46,10 @@ TCP_TO_OPC = 2
 OPC_TO_TCP = 3
 
 # --------------------------------------------------------------------------- #
-# service logging configuration
-# --------------------------------------------------------------------------- #
-
-'''FORMAT = ('%(asctime)-15s %(threadName)-15s'
-' %(levelname)-8s %(module)-15s:%(lineno)-8s %(message)s')
-logging.basicConfig(format=FORMAT)
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)'''
-
-# --------------------------------------------------------------------------- #
 # configuration form structure
 # --------------------------------------------------------------------------- #
+# modbus TCP/modbus serial conversion settings form
 class ModbusConfigs(Form):
-    #Opens json file to extract last submitted values
     ip = StringField('IP', [validators.Length(min=0, max=15)])
     port = StringField('Port', [validators.Length(min=0, max=6)])
     serial_port = StringField('SerialPort', [validators.Length(min=0, max=8)])
@@ -82,21 +59,103 @@ class ModbusConfigs(Form):
     bytesize = StringField('Bytesize', [validators.Length(min=0, max=1)])
     stopbits = StringField('Stopbits', [validators.Length(min=0, max=1)])
 
+# modbus/OPCUA conversion settings form
+class OPC_to_TCP_Configs(Form):
+    name = StringField('Tag Name', [validators.Length(min=0, max=100)])
+    register = StringField('Register', [validators.Length(min=0, max=6)])
+    var_type = SelectField(u'Variable Type', coerce=str, choices=[("int", "int"), ("float", "float"), ("bit", "bit")])
+    opc_object = StringField('OPC UA Object', [validators.Length(min=0, max=100)])
+    slave_ip = StringField('Server IP', [validators.Length(min=0, max=15)])
+    unit_id = StringField('Unit ID', [validators.Length(min=0, max=3)])
+
+# mode selection form
 class Mode(Form):
     #Opens json file to extract last submitted values
     mode = SelectField(u'Mode', coerce=int, choices=[(TCP_TO_SERIAL, 'Modbus TCP to Serial'),
         (SERIAL_TO_TCP, 'Modbus Serial to TCP'), (TCP_TO_OPC, 'Modbus TCP to OPC UA'), (OPC_TO_TCP, 'OPC UA to Modbus TCP')])
 
-class ServerStarters():
+# --------------------------------------------------------------------------- #
+# Class with methods for mode selection at start
+# --------------------------------------------------------------------------- #
+class Starters():
+    # modbus TCP to modbus serial conversion mode
+    def startTCPtoSerial():
+        with open('config/TCP_to_Serial.json', 'r') as openfile:
+            payload = json.load(openfile)
+        try:
+            r = requests.get('http://127.0.0.1:5000/')
+            if r.status_code == 200:
+                print('Starting server...')
+                pay = payload
+                head = {'content-type': 'application/json'}
+                startForwarder = threading.Thread(target=Starters.serialForwarderStart, args=(pay, head,))
+                startForwarder.start()
+                not_started = False
+        except:
+            print('Server not yet started')
+            not_started = True
+        return not_started
+
+    # modbus serial to modbus TCP conversion mode
+    def startSerialToTCP():
+        with open('config/Serial_to_TCP.json', 'r') as openfile:
+            payload = json.load(openfile)
+        try:
+            r = requests.get('http://127.0.0.1:5000/')
+            if r.status_code == 200:
+                print('Starting server...')
+                pay = payload
+                head = {'content-type': 'application/json'}
+                startForwarder = threading.Thread(target=Starters.tcpForwarderStart, args=(pay, head,))
+                startForwarder.start()
+                not_started = False
+        except:
+            print('Server not yet started')
+            not_started = True
+        return not_started
+
+    # modbus TCP to OPC UA conversion mode
+    def startTCPtoOPC():
+        with open('config/TCP_to_OPC.json', 'r') as openfile:
+            payload = json.load(openfile)
+        try:
+            r = requests.get('http://127.0.0.1:5000/')
+            if r.status_code == 200:
+                print('Starting server...')
+                pay = payload
+                head = {'content-type': 'application/json'}
+                startOPCUA = threading.Thread(target=Starters.opcServerStart, args=(head,))
+                startOPCUA.start()
+                startModbus = threading.Thread(target=Starters.modbusTCPServerStart, args=(pay, head,))
+                startModbus.start()
+                not_started = False
+        except:
+            print('Server not yet started')
+            not_started = True
+        return not_started
+    
+    # OPC UA to modbus TCP conversion mode
+    def startOPCtoTCP():
+        try:
+            r = requests.get('http://127.0.0.1:5000/')
+            if r.status_code == 200:
+                print('Starting server...')
+                head = {'content-type': 'application/json'}
+                startTCPClient = threading.Thread(target=Starters.modbusTCPClientStart, args=(head,))
+                startTCPClient.start()
+                not_started = False
+        except:
+            print('Server not yet started')
+            not_started = True
+        return not_started
+
     def modbusTCPServerStart(pay, head):
         req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/server', data=json.dumps(pay), 
                                 headers = head)
-        time.sleep(1)
 
     def modbusTCPClientStart(head):
         req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/tcpclient', data=None, 
                                 headers = head)
-        time.sleep(1)
 
     def opcClientStart(head):
         req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/opcuaclient', data=None, 
@@ -237,9 +296,6 @@ class ModbusTCPServer(Resource):
         # --------------------------------------------------------------------------- #
         query = self.reqparse.parse_args()
 
-        #client = ModbusSerialClient(method='rtu', port=query['serial_port'], baudrate=query['baudrate'],
-                                #bytesize=query['bytesize'], parity=query['parity'], stopbits=query['stopbits'])
-        
         initval = 0
         max_regs = 20000
 
@@ -295,7 +351,7 @@ class ModbusTCPClient(Resource):
         # starting!
         server.start()
         #head = {'content-type': 'application/json'}
-        #startOPCUA = threading.Thread(target=ServerStarters.opcClientStart, args=(head,))
+        #startOPCUA = threading.Thread(target=Starters.opcClientStart, args=(head,))
         #startOPCUA.start()
         try:
             while True:
@@ -417,7 +473,7 @@ class OPCUAServer(Resource):
         # starting!
         server.start()
         head = {'content-type': 'application/json'}
-        startOPCUA = threading.Thread(target=ServerStarters.opcClientStart, args=(head,))
+        startOPCUA = threading.Thread(target=Starters.opcClientStart, args=(head,))
         startOPCUA.start()
         try:
             while True:
@@ -597,9 +653,21 @@ def serial_to_tcp():
 @app.route('/tcp_to_opc', methods=['GET', 'POST'])
 def tcp_to_opc():
     global restart
+    with open('config/TCP_to_OPC.json', 'r') as openfile:
+        lastConfig = json.load(openfile)
+    form = ModbusConfigs(request.form, ip=lastConfig['ip'])
     if request.method == 'POST':
-        if request.form['action'] == 'Add Tag':
+        if request.form['action'] == 'Apply':
+            ip = form.ip.data
+            payload = {'ip': ip, 'port': 502}
+            gw_config = json.dumps(payload)
+            with open("config/TCP_to_OPC.json", "w") as outfile:
+                outfile.write(gw_config)
+            return redirect(url_for('tcp_to_opc'))
+
+        elif request.form['action'] == 'Add Tag':
             return redirect(url_for('new_tcp_to_opc_tag'))
+
         elif request.form['action'] == 'Delete Tag':
             tag_id = request.form['tagID']
             obj = TCP_to_OPC_Tags.query.filter_by(id=int(tag_id)).one()
@@ -607,15 +675,20 @@ def tcp_to_opc():
             db.session.commit()
             time.sleep(1)
             return redirect(url_for('tcp_to_opc'))
+
         elif request.form['action'] == 'Delete All':
             db.session.query(TCP_to_OPC_Tags).delete()
             db.session.commit()
             time.sleep(1)
             return redirect(url_for('tcp_to_opc'))
+
         elif request.form['action'] == 'Reset':
             restart = 1
             return redirect(url_for('hello'))
-    return render_template('tcp_to_opc.html', tags = TCP_to_OPC_Tags.query.all() )
+        
+        elif request.form['action'] == 'Back':
+            return redirect(url_for('hello'))
+    return render_template('tcp_to_opc.html', tags = TCP_to_OPC_Tags.query.all(), form=form)
 
 # --------------------------------------------------------------------------- #
 # OPC UA to modbus TCP configuration page
@@ -626,6 +699,7 @@ def opc_to_tcp():
     if request.method == 'POST':
         if request.form['action'] == 'Add Tag':
             return redirect(url_for('new_opc_to_tcp_tag'))
+            
         elif request.form['action'] == 'Delete Tag':
             tag_id = request.form['tagID']
             obj = OPC_to_TCP_Tags.query.filter_by(id=int(tag_id)).one()
@@ -633,13 +707,18 @@ def opc_to_tcp():
             db.session.commit()
             time.sleep(1)
             return redirect(url_for('opc_to_tcp'))
+
         elif request.form['action'] == 'Delete All':
             db.session.query(OPC_to_TCP_Tags).delete()
             db.session.commit()
             time.sleep(1)
             return redirect(url_for('opc_to_tcp'))
+
         elif request.form['action'] == 'Reset':
             restart = 1
+            return redirect(url_for('hello'))
+
+        elif request.form['action'] == 'Back':
             return redirect(url_for('hello'))
     return render_template('opc_to_tcp_all.html', tags = OPC_to_TCP_Tags.query.all() )
 
@@ -648,29 +727,40 @@ def opc_to_tcp():
 # --------------------------------------------------------------------------- #
 @app.route('/new_tcp_to_opc_tag', methods = ['GET', 'POST'])
 def new_tcp_to_opc_tag():
-    if request.method == 'POST':
-        tag = TCP_to_OPC_Tags(request.form['name'], request.form['register'],
-            request.form['var_type'], request.form['opc_object'])
+    form = OPC_to_TCP_Configs(request.form, name="", register="", var_type="", opc_object="")
+    if request.method == 'POST' and form.validate():
+        name = form.name.data
+        register = form.register.data
+        var_type = form.var_type.data
+        opc_object = form.opc_object.data
+
+        tag = TCP_to_OPC_Tags(name, register, var_type, opc_object)
 
         db.session.add(tag)
         db.session.commit()
         return redirect(url_for('tcp_to_opc'))
-    return render_template('new_tcp_to_opc_tag.html')
+    return render_template('new_tcp_to_opc_tag.html', form=form)
 
 # --------------------------------------------------------------------------- #
 # OPC UA to modbus TCP tag creation page
 # --------------------------------------------------------------------------- #
 @app.route('/new_opc_to_tcp_tag', methods = ['GET', 'POST'])
 def new_opc_to_tcp_tag():
-    if request.method == 'POST':
-        tag = OPC_to_TCP_Tags(request.form['name'], request.form['register'],
-            request.form['var_type'], request.form['opc_object'], request.form['slave_ip'],
-            request.form['unit_id'])
+    form = OPC_to_TCP_Configs(request.form, name="", register="", var_type="", opc_object="", slave_ip="", unit_id="")
+    if request.method == 'POST' and form.validate():
+        name = form.name.data
+        register = form.register.data
+        var_type = form.var_type.data
+        opc_object = form.opc_object.data
+        slave_ip = form.slave_ip.data
+        unit_id = form.unit_id.data
+
+        tag = OPC_to_TCP_Tags(name, register, var_type, opc_object, slave_ip, unit_id)
 
         db.session.add(tag)
         db.session.commit()
         return redirect(url_for('opc_to_tcp'))
-    return render_template('new_opc_to_tcp_tag.html')
+    return render_template('new_opc_to_tcp_tag.html', form=form)
 
 # --------------------------------------------------------------------------- #
 # application start method
@@ -685,104 +775,45 @@ def start_runner():
             with open('config/Mode.json', 'r') as openfile:
                 mode = json.load(openfile)
             
-            # --------------------------------------------------------------------------- #
             # modbus TCP to modbus serial conversion mode
-            # --------------------------------------------------------------------------- #
             if mode['mode'] == TCP_TO_SERIAL:
-                with open('config/TCP_to_Serial.json', 'r') as openfile:
-                    payload = json.load(openfile)
-                try:
-                    r = requests.get('http://127.0.0.1:5000/')
-                    if r.status_code == 200:
-                        print('Starting server...')
-                        pay = payload
-                        head = {'content-type': 'application/json'}
-                        startForwarder = threading.Thread(target=ServerStarters.serialForwarderStart, args=(pay, head,))
-                        startForwarder.start()
-                        not_started = False
-                except:
-                    print('Server not yet started')
-                time.sleep(2)
+                not_started = Starters.startTCPtoSerial()
 
-            # --------------------------------------------------------------------------- #
             # modbus serial to modbus TCP conversion mode
-            # --------------------------------------------------------------------------- #
             elif mode['mode'] == SERIAL_TO_TCP:
-                with open('config/Serial_to_TCP.json', 'r') as openfile:
-                    payload = json.load(openfile)
-                try:
-                    r = requests.get('http://127.0.0.1:5000/')
-                    if r.status_code == 200:
-                        print('Starting server...')
-                        pay = payload
-                        head = {'content-type': 'application/json'}
-                        startForwarder = threading.Thread(target=ServerStarters.tcpForwarderStart, args=(pay, head,))
-                        startForwarder.start()
-                        not_started = False
-                except:
-                    print('Server not yet started')
-                time.sleep(2)
+                not_started = Starters.startSerialToTCP()
 
-            # --------------------------------------------------------------------------- #
             # modbus TCP to OPC UA conversion mode
-            # --------------------------------------------------------------------------- #
             elif mode['mode'] == TCP_TO_OPC:
-                with open('config/TCP_to_OPC.json', 'r') as openfile:
-                    payload = json.load(openfile)
-                try:
-                    r = requests.get('http://127.0.0.1:5000/')
-                    if r.status_code == 200:
-                        print('Starting server...')
-                        pay = payload
-                        head = {'content-type': 'application/json'}
-                        startOPCUA = threading.Thread(target=ServerStarters.opcServerStart, args=(head,))
-                        startOPCUA.start()
-                        startModbus = threading.Thread(target=ServerStarters.modbusTCPServerStart, args=(pay, head,))
-                        startModbus.start()
-                        not_started = False
-                except:
-                    print('Server not yet started')
-                time.sleep(2)
+                not_started = Starters.startTCPtoOPC()
 
-            # --------------------------------------------------------------------------- #
             # OPC UA to modbus TCP conversion mode
-            # --------------------------------------------------------------------------- #
             elif mode['mode'] == OPC_TO_TCP:
-                try:
-                    r = requests.get('http://127.0.0.1:5000/')
-                    if r.status_code == 200:
-                        print('Starting server...')
-                        head = {'content-type': 'application/json'}
-                        startTCPClient = threading.Thread(target=ServerStarters.modbusTCPClientStart, args=(head,))
-                        startTCPClient.start()
-                        not_started = False
-                except:
-                    print('Server not yet started')
-                time.sleep(2)
+                not_started = Starters.startOPCtoTCP()
             # --------------------------------------------------------------------------- #
-            # exceptionccd
+            # exception
             # --------------------------------------------------------------------------- #
             else:
                 print('Invalid mode selected.')
 
     print('Started runner')
-    thread = threading.Thread(target=start_loop)
-    thread.start()
+    start_api = threading.Thread(target=start_loop)
+    start_api.start()
 
 # --------------------------------------------------------------------------- #
 # application boot function
 # --------------------------------------------------------------------------- #
 def boot(event):
-    # sets the event for the app to reboot with new config
-    def killer():
+    # sets the event for the api to restart with new config
+    def reset():
         global restart
         while True:
             if restart == 1:
                 time.sleep(0.5)
                 event.set()
     # Assures the reset check loop will only start after application start
-    thread2 = threading.Thread(target=killer)
-    thread2.start()
+    reset_check = threading.Thread(target=reset)
+    reset_check.start()
     # starts the application
     start_runner()
     app.run()
