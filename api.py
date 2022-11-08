@@ -11,6 +11,7 @@ from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.payload import BinaryPayloadBuilder
 
 from opcua import ua, Client, Server
+from opcua.server.user_manager import UserManager
 
 from wtforms import Form, BooleanField, StringField, PasswordField, SelectField, validators
 
@@ -74,6 +75,11 @@ class Mode(Form):
     mode = SelectField(u'Mode', coerce=int, choices=[(TCP_TO_SERIAL, 'Modbus TCP to Serial'),
         (SERIAL_TO_TCP, 'Modbus Serial to TCP'), (TCP_TO_OPC, 'Modbus TCP to OPC UA'), (OPC_TO_TCP, 'OPC UA to Modbus TCP')])
 
+# User registration form
+class User(Form):
+    name = StringField('Name', [validators.Length(min=0, max=100)])
+    password = PasswordField('Password', [validators.Length(min=0, max=100)])
+
 # --------------------------------------------------------------------------- #
 # Class with methods for mode selection at start
 # --------------------------------------------------------------------------- #
@@ -124,10 +130,10 @@ class Starters():
                 print('Starting server...')
                 pay = payload
                 head = {'content-type': 'application/json'}
-                startOPCUA = threading.Thread(target=Starters.opcServerStart, args=(head,))
-                startOPCUA.start()
                 startModbus = threading.Thread(target=Starters.modbusTCPServerStart, args=(pay, head,))
                 startModbus.start()
+                startOPCUA = threading.Thread(target=Starters.opcServerStart, args=(head,))
+                startOPCUA.start()
                 not_started = False
         except:
             print('Server not yet started')
@@ -278,16 +284,6 @@ class ModbusTCPServer(Resource):
                                    help='No IP address provided')
         self.reqparse.add_argument('port', type=int, required=True, location='json',
                                    help='No port provided')
-        self.reqparse.add_argument('serial_port', type=str, required=True, location='json',
-                                   help='No serial port provided')
-        self.reqparse.add_argument('baudrate', type=int, required=True, location='json',
-                                   help='No baudrate provided')
-        self.reqparse.add_argument('bytesize', type=int, required=True, location='json',
-                                   help='No bytesize provided')
-        self.reqparse.add_argument('parity', type=str, required=True, location='json',
-                                   help='No parity provided')
-        self.reqparse.add_argument('stopbits', type=int, required=True, location='json',
-                                   help='No stopbits provided')
         super(ModbusTCPServer, self).__init__()
 
     def post(self):
@@ -438,12 +434,26 @@ class OPCUAClient(Resource):
             opc_client.disconnect()
 
 class OPCUAServer(Resource):
+    def user_manager(isession, username, password):
+        isession.user = UserManager.User
+        users = UserDB.query.all()
+        for user in users:
+            if username == user.name and password == user.password:
+                return True
+        return False
+        #return username in test_list and password == test_list[username]
+
     def post(self):
         server = Server()
         server.set_endpoint("opc.tcp://127.0.0.1:4880")
         # setup our own namespace, not really necessary but should as spec
         uri = "Gateway"
         idx = server.register_namespace(uri)
+
+        policyIDs = ["Username"]
+        server.set_security_IDs(policyIDs)
+        server.user_manager.set_user_manager(OPCUAServer.user_manager)
+
         # get Objects node, this is where we should put our nodes
         objects = server.get_objects_node()
 
@@ -491,6 +501,7 @@ app = Flask(__name__)
 # tags databases instance
 app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/tcp_to_opc.sqlite3'
 app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/opc_to_tcp.sqlite3'
+app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/user.sqlite3'
 db = SQLAlchemy(app)
 
 # api and resources instance
@@ -537,6 +548,18 @@ class OPC_to_TCP_Tags(db.Model):
         self.opc_object = opc_object
         self.slave_ip = slave_ip
         self.unit_id = unit_id
+
+# --------------------------------------------------------------------------- #
+# User database
+# --------------------------------------------------------------------------- #
+class UserDB(db.Model):
+    id = db.Column('tag_id', db.Integer, primary_key = True)
+    name = db.Column(db.String(100))
+    password = db.Column(db.String(100))
+
+    def __init__(self, name, password):
+        self.name = name
+        self.password = password
 
 # application restart flag
 restart = 0
@@ -761,6 +784,23 @@ def new_opc_to_tcp_tag():
         db.session.commit()
         return redirect(url_for('opc_to_tcp'))
     return render_template('new_opc_to_tcp_tag.html', form=form)
+
+# --------------------------------------------------------------------------- #
+# User registration page
+# --------------------------------------------------------------------------- #
+@app.route('/new_user', methods = ['GET', 'POST'])
+def new_user():
+    form = User(request.form, name="", password="")
+    if request.method == 'POST' and form.validate():
+        name = form.name.data
+        password = form.password.data
+
+        user = UserDB(name, password)
+
+        db.session.add(user)
+        db.session.commit()
+        return redirect(url_for('hello'))
+    return render_template('new_user.html', form=form)
 
 # --------------------------------------------------------------------------- #
 # application start method

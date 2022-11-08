@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+{% from "_formhelpers.html" import render_field %}
+<html>
+   <body>
+      <div style="text-align: center; background-color: #F5F5F5; padding: 10px;">
+         <h2>New User</h2>
+         <hr/>
+         
+         {%- for category, message in get_flashed_messages(with_categories = true) %}
+            <div class = "alert alert-danger">
+               {{ message }}
+            </div>
+         {%- endfor %}
+         
+         <form action = "" method = "post">
+            <dl>
+               {{ render_field(form.name) }}
+            </dl>
+            <dl>
+               {{ render_field(form.password) }}
+            </dl>
+            <input type = "submit" value = "Submit" />
+         </form>
+      </div>
+   </body>
+</html>
