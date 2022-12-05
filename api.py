@@ -16,7 +16,7 @@ from opcua.server.user_manager import UserManager
 from wtforms import Form, BooleanField, StringField, PasswordField, SelectField, validators
 
 from flask import Flask, request, render_template, url_for, redirect
-from flask_restful import Api, Resource, reqparse, marshal, fields
+from flask_restful import Api, Resource, reqparse
 from flask_sqlalchemy import SQLAlchemy
 from multiprocessing import Process
 
@@ -74,11 +74,6 @@ class Mode(Form):
     #Opens json file to extract last submitted values
     mode = SelectField(u'Mode', coerce=int, choices=[(TCP_TO_SERIAL, 'Modbus TCP to Serial'),
         (SERIAL_TO_TCP, 'Modbus Serial to TCP'), (TCP_TO_OPC, 'Modbus TCP to OPC UA'), (OPC_TO_TCP, 'OPC UA to Modbus TCP')])
-
-# User registration form
-class User(Form):
-    name = StringField('Name', [validators.Length(min=0, max=100)])
-    password = PasswordField('Password', [validators.Length(min=0, max=100)])
 
 # --------------------------------------------------------------------------- #
 # Class with methods for mode selection at start
@@ -147,7 +142,7 @@ class Starters():
             if r.status_code == 200:
                 print('Starting server...')
                 head = {'content-type': 'application/json'}
-                startTCPClient = threading.Thread(target=Starters.modbusTCPClientStart, args=(head,))
+                startTCPClient = threading.Thread(target=Starters.TcpClientOPCServerStart, args=(head,))
                 startTCPClient.start()
                 not_started = False
         except:
@@ -156,27 +151,27 @@ class Starters():
         return not_started
 
     def modbusTCPServerStart(pay, head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/server', data=json.dumps(pay), 
+        req = requests.post('http://localhost:5000/modbus-explorer/api/tcpserver', data=json.dumps(pay), 
                                 headers = head)
 
-    def modbusTCPClientStart(head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/tcpclient', data=None, 
+    def TcpClientOPCServerStart(head):
+        req = requests.post('http://localhost:5000/modbus-explorer/api/tcpclientopcserver', data=None, 
                                 headers = head)
 
     def opcClientStart(head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/opcuaclient', data=None, 
+        req = requests.post('http://localhost:5000/modbus-explorer/api/opcuaclient', data=None, 
                                 headers = head)
 
     def opcServerStart(head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/opcuaserver', data=None, 
+        req = requests.post('http://localhost:5000/modbus-explorer/api/opcuaserver', data=None, 
                                 headers = head)
     
     def serialForwarderStart(pay, head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/mbusSerialforwarder', data=json.dumps(pay), 
+        req = requests.post('http://localhost:5000/modbus-explorer/api/mbusSerialforwarder', data=json.dumps(pay), 
                                 headers = head)
     
     def tcpForwarderStart(pay, head):
-        req = requests.post('http://localhost:5000/modbus-explorer/api/tcp/mbusTCPforwarder', data=json.dumps(pay), 
+        req = requests.post('http://localhost:5000/modbus-explorer/api/mbusTCPforwarder', data=json.dumps(pay), 
                                 headers = head)
 
 # --------------------------------------------------------------------------- #
@@ -308,70 +303,6 @@ class ModbusTCPServer(Resource):
         # --------------------------------------------------------------------------- #
         StartTcpServer(context, address=(query['ip'], query['port']))
 
-class ModbusTCPClient(Resource):
-    def post(self):
-        server = Server()
-        server.set_endpoint("opc.tcp://127.0.0.1:4880")
-        # setup our own namespace, not really necessary but should as spec
-        uri = "Gateway"
-        idx = server.register_namespace(uri)
-        # get Objects node, this is where we should put our nodes
-        objects = server.get_objects_node()
-
-        tags = OPC_to_TCP_Tags.query.all()
-        distinct_objs = OPC_to_TCP_Tags.query.with_entities(OPC_to_TCP_Tags.opc_object).distinct()
-        index = 0
-        obj_index = 0
-        n_tags = len(tags)
-        n_objects = distinct_objs.count()
-        tag_name = [None] * n_tags
-        slave_ip = [None] * n_tags
-        unit_id = [None] * n_tags
-        tag_register = [None] * n_tags
-        object_name = [None] * n_objects
-        opc_objects = [None] * n_objects
-        # populating our address space
-        for tag in distinct_objs:
-            object_name[obj_index] = tag.opc_object
-            opc_objects[obj_index] = objects.add_object(idx, str(tag.opc_object))
-            obj_index += 1
-        obj_index = 0
-        for tag in tags:
-            for opc_obj in opc_objects:
-                if tag.opc_object == object_name[obj_index]:
-                    tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1)
-                    tag_name[index].set_writable()
-                obj_index += 1
-            index += 1
-            obj_index = 0
-        # starting!
-        server.start()
-        #head = {'content-type': 'application/json'}
-        #startOPCUA = threading.Thread(target=Starters.opcClientStart, args=(head,))
-        #startOPCUA.start()
-        try:
-            while True:
-                index = 0
-                for tag in tags:
-                    tag_name_find = "2:" + str(tag.name)
-                    tag_object_find = "2:" + str(tag.opc_object)
-                    myData = tag_name[index].get_value()
-                    mbus_client = ModbusTcpClient(tag.slave_ip, 502)
-                    mbus_client.connect()
-                    if tag.var_type == "int":
-                        count = 1
-                        mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
-                    elif tag.var_type == "bit":
-                        count = 1
-                        mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
-                    #elif tag.var_type == "float":
-                        #count = 2
-                        #data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=tag.unit_id)
-                    mbus_client.close()
-        finally:
-            #close connection, remove subcsriptions, etc
-            server.stop()
-
 class OPCUAClient(Resource):
     # --------------------------------------------------------------------------- #
     # gateway resource structure
@@ -433,6 +364,73 @@ class OPCUAClient(Resource):
         finally:
             opc_client.disconnect()
 
+class TcpClientOPCServer(Resource):
+    def user_manager(isession, username, password):
+        isession.user = UserManager.User
+        users = UserDB.query.all()
+        for user in users:
+            if username == user.name and password == user.password:
+                return True
+        return False
+
+    def post(self):
+        server = Server()
+        server.set_endpoint("opc.tcp://127.0.0.1:4880")
+        # setup our own namespace, not really necessary but should as spec
+        uri = "Gateway"
+        idx = server.register_namespace(uri)
+
+        policyIDs = ["Username"]
+        server.set_security_IDs(policyIDs)
+        server.user_manager.set_user_manager(OPCUAServer.user_manager)
+
+        objects = server.get_objects_node()
+
+        tags = OPC_to_TCP_Tags.query.all()
+        distinct_objs = OPC_to_TCP_Tags.query.with_entities(OPC_to_TCP_Tags.opc_object).distinct()
+        index = 0
+        obj_index = 0
+        n_tags = len(tags)
+        n_objects = distinct_objs.count()
+        tag_name = [None] * n_tags
+        object_name = [None] * n_objects
+        opc_objects = [None] * n_objects
+        # populating our address space
+        for tag in distinct_objs:
+            object_name[obj_index] = tag.opc_object
+            opc_objects[obj_index] = objects.add_object(idx, str(tag.opc_object))
+            obj_index += 1
+        obj_index = 0
+        for tag in tags:
+            for opc_obj in opc_objects:
+                if tag.opc_object == object_name[obj_index]:
+                    tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1)
+                    tag_name[index].set_writable()
+                obj_index += 1
+            index += 1
+            obj_index = 0
+        # starting!
+        server.start()
+        try:
+            while True:
+                index = 0
+                for tag in tags:
+                    myData = tag_name[index].get_value()
+                    mbus_client = ModbusTcpClient(tag.slave_ip, 502)
+                    mbus_client.connect()
+                    if tag.var_type == "int":
+                        mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
+                    elif tag.var_type == "bit":
+                        mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
+                    elif tag.var_type == "float":
+                        builder = BinaryPayloadBuilder(endian=Endian.Big)
+                        builder.add_32bit_float(float(myData))
+                        mbus_client.write_registers(int(tag.register), builder, unit=tag.unit_id)
+                    mbus_client.close()
+        finally:
+            #close connection, remove subcsriptions, etc
+            server.stop()
+
 class OPCUAServer(Resource):
     def user_manager(isession, username, password):
         isession.user = UserManager.User
@@ -446,7 +444,6 @@ class OPCUAServer(Resource):
     def post(self):
         server = Server()
         server.set_endpoint("opc.tcp://127.0.0.1:4880")
-        # setup our own namespace, not really necessary but should as spec
         uri = "Gateway"
         idx = server.register_namespace(uri)
 
@@ -454,7 +451,6 @@ class OPCUAServer(Resource):
         server.set_security_IDs(policyIDs)
         server.user_manager.set_user_manager(OPCUAServer.user_manager)
 
-        # get Objects node, this is where we should put our nodes
         objects = server.get_objects_node()
 
         tags = TCP_to_OPC_Tags.query.all()
@@ -498,7 +494,7 @@ class OPCUAServer(Resource):
 # application instance
 app = Flask(__name__)
 
-# tags databases instance
+# databases instance
 app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/tcp_to_opc.sqlite3'
 app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/opc_to_tcp.sqlite3'
 app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/user.sqlite3'
@@ -506,12 +502,12 @@ db = SQLAlchemy(app)
 
 # api and resources instance
 api = Api(app)
-api.add_resource(ModbusTCPServer, '/modbus-explorer/api/tcp/server')
-api.add_resource(ModbusTCPClient, '/modbus-explorer/api/tcp/tcpclient')
-api.add_resource(OPCUAClient, '/modbus-explorer/api/tcp/opcuaclient')
-api.add_resource(OPCUAServer, '/modbus-explorer/api/tcp/opcuaserver')
-api.add_resource(ModbusSerialForwarder, '/modbus-explorer/api/tcp/mbusSerialforwarder')
-api.add_resource(ModbusTcpForwarder, '/modbus-explorer/api/tcp/mbusTCPforwarder')
+api.add_resource(ModbusTCPServer, '/modbus-explorer/api/tcpserver')
+api.add_resource(TcpClientOPCServer, '/modbus-explorer/api/tcpclientopcserver')
+api.add_resource(OPCUAClient, '/modbus-explorer/api/opcuaclient')
+api.add_resource(OPCUAServer, '/modbus-explorer/api/opcuaserver')
+api.add_resource(ModbusSerialForwarder, '/modbus-explorer/api/mbusSerialforwarder')
+api.add_resource(ModbusTcpForwarder, '/modbus-explorer/api/mbusTCPforwarder')
 
 # --------------------------------------------------------------------------- #
 # modbus TCP to OPC UA tags database
@@ -786,23 +782,6 @@ def new_opc_to_tcp_tag():
     return render_template('new_opc_to_tcp_tag.html', form=form)
 
 # --------------------------------------------------------------------------- #
-# User registration page
-# --------------------------------------------------------------------------- #
-@app.route('/new_user', methods = ['GET', 'POST'])
-def new_user():
-    form = User(request.form, name="", password="")
-    if request.method == 'POST' and form.validate():
-        name = form.name.data
-        password = form.password.data
-
-        user = UserDB(name, password)
-
-        db.session.add(user)
-        db.session.commit()
-        return redirect(url_for('hello'))
-    return render_template('new_user.html', form=form)
-
-# --------------------------------------------------------------------------- #
 # application start method
 # --------------------------------------------------------------------------- #
 def start_runner():
@@ -865,7 +844,6 @@ if __name__ == "__main__":
     db.create_all()
     event = multiprocessing.Event()
     p = Process(target=boot, args=(event,))
-    tags = TCP_to_OPC_Tags.query.all()
     p.start()
     while True:
         if event.is_set():
