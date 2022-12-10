@@ -404,8 +404,12 @@ class TcpClientOPCServer(Resource):
         for tag in tags:
             for opc_obj in opc_objects:
                 if tag.opc_object == object_name[obj_index]:
-                    tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1)
-                    tag_name[index].set_writable()
+                    if tag.var_type == "float":
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1.1)
+                        tag_name[index].set_writable()
+                    else:
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1)
+                        tag_name[index].set_writable()
                 obj_index += 1
             index += 1
             obj_index = 0
@@ -423,9 +427,11 @@ class TcpClientOPCServer(Resource):
                     elif tag.var_type == "bit":
                         mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
                     elif tag.var_type == "float":
-                        builder = BinaryPayloadBuilder(endian=Endian.Big)
+                       
+                         print(myData)builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
                         builder.add_32bit_float(float(myData))
-                        mbus_client.write_registers(int(tag.register), builder, unit=tag.unit_id)
+                        payload = builder.to_registers()
+                        mbus_client.write_registers(int(tag.register), payload)
                     mbus_client.close()
         finally:
             #close connection, remove subcsriptions, etc
