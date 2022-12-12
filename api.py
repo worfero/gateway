@@ -65,7 +65,8 @@ class OPC_to_TCP_Configs(Form):
     name = StringField('Tag Name', [validators.Length(min=0, max=100)])
     register = StringField('Register', [validators.Length(min=0, max=6)])
     var_type = SelectField(u'Variable Type', coerce=str, choices=[("int", "int"), ("float", "float"), ("bit", "bit")])
-    opc_object = StringField('OPC UA Object', [validators.Length(min=0, max=100)])
+    opc_object = SelectField(u'Register Type', coerce=str, choices=[("CO", "Coil"), ("DI", "Discrete Input"), 
+        ("HR", "Holding Register"), ("IR", "Input Register")])
     slave_ip = StringField('Server IP', [validators.Length(min=0, max=15)])
     unit_id = StringField('Unit ID', [validators.Length(min=0, max=3)])
 
@@ -343,28 +344,40 @@ class OPCUAClient(Resource):
                     # write function
                     if tag.var_type == "int":
                         count = 1
-                        data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
+                        if tag.opc_object == "HR":
+                            data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
+                        elif tag.opc_object == "IR":
+                            data[index] = mbus_client.read_input_registers(tag_register[index], count, unit=1)
                         register = data[index].registers[0]
                     elif tag.var_type == "bit":
                         count = 1
-                        data[index] = mbus_client.read_coils(tag_register[index], count, unit=1)
+                        if tag.opc_object == "CO":
+                            data[index] = mbus_client.read_coils(tag_register[index], count, unit=1)
+                        elif tag.opc_object == "DI":
+                            data[index] = mbus_client.read_discrete_inputs(tag_register[index], count, unit=1)
                         register = data[index].bits[0]
                     elif tag.var_type == "float":
                         count = 2
-                        data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
+                        if tag.opc_object == "HR":
+                            data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
+                        elif tag.opc_object == "IR":
+                            data[index] = mbus_client.read_input_registers(tag_register[index], count, unit=1)
                         decoder = BinaryPayloadDecoder.fromRegisters(data[index].registers, Endian.Big, wordorder=Endian.Little)
                         register = decoder.decode_32bit_float()
                     # read function
                     if myData[index].get_value() != check[index]:
                         if tag.var_type == "int":
-                            mbus_client.write_registers(int(tag.register), int(myData[index].get_value()), unit=1)
+                            if tag.opc_object == "HR":
+                                mbus_client.write_registers(int(tag.register), int(myData[index].get_value()), unit=1)
                         elif tag.var_type == "bit":
-                            mbus_client.write_coils(int(tag.register), int(myData[index].get_value()), unit=1)
+                            if tag.opc_object == "CO":
+                                mbus_client.write_coils(int(tag.register), int(myData[index].get_value()), unit=1)
                         elif tag.var_type == "float":
                             builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
                             builder.add_32bit_float(float(myData[index].get_value()))
                             payload = builder.to_registers()
-                            mbus_client.write_registers(int(tag.register), payload)
+                            if tag.opc_object == "HR":
+                                mbus_client.write_registers(int(tag.register), payload)
                     elif register != check[index]:
                         myData[index].set_value(register)
                     check[index] = register
@@ -440,29 +453,41 @@ class TcpClientOPCServer(Resource):
                     # read function
                     if tag.var_type == "int":
                         count = 1
-                        data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        if tag.opc_object == "HR":
+                            data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        elif tag.opc_object == "IR":
+                            data[index] = mbus_client.read_input_registers(int(tag.register), count, unit=1)
                         register = data[index].registers[0]
                     elif tag.var_type == "bit":
                         count = 1
-                        data[index] = mbus_client.read_coils(int(tag.register), count, unit=1)
+                        if tag.opc_object == "CO":
+                            data[index] = mbus_client.read_coils(int(tag.register), count, unit=1)
+                        elif tag.opc_object == "DI":
+                            data[index] = mbus_client.read_discrete_inputs(int(tag.register), count, unit=1)
                         register = data[index].bits[0]
                     elif tag.var_type == "float":
                         count = 2
-                        data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        if tag.opc_object == "HR":
+                            data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        elif tag.opc_object == "IR":
+                            data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
                         decoder = BinaryPayloadDecoder.fromRegisters(data[index].registers, Endian.Big, wordorder=Endian.Little)
                         register = decoder.decode_32bit_float()
                     if register != check[index]:
                         tag_name[index].set_value(register)
                     elif myData != check[index]:
                         if tag.var_type == "int":
-                            mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
+                            if tag.opc_object == "HR":
+                                mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
                         elif tag.var_type == "bit":
-                            mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
+                            if tag.opc_object == "CO":
+                                mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
                         elif tag.var_type == "float":
                             builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
                             builder.add_32bit_float(float(myData))
                             payload = builder.to_registers()
-                            mbus_client.write_registers(int(tag.register), payload, unit=int(tag.unit_id))
+                            if tag.opc_object == "HR":
+                                mbus_client.write_registers(int(tag.register), payload, unit=int(tag.unit_id))
                     check[index] = register
                     mbus_client.close()
         finally:
