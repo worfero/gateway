@@ -325,6 +325,8 @@ class OPCUAClient(Resource):
             myData = [None] * n_tags
             obj = [None] * n_tags
             tag_register = [None] * n_tags
+            check = [0] * n_tags
+            data = [None] * n_tags
             for tag in tags:
                 tag_name[index] = "2:" + str(tag.name)
                 tag_object[index] = "2:" + str(tag.opc_object)
@@ -334,28 +336,38 @@ class OPCUAClient(Resource):
                 index += 1
             mbus_client = ModbusTcpClient("127.0.0.1", 502)
             mbus_client.connect()
-            data = [None] * n_tags
             while True:
                 index = 0
                 register = None
                 for tag in tags:
+                    # write function
                     if tag.var_type == "int":
                         count = 1
                         data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
+                        register = data[index].registers[0]
                     elif tag.var_type == "bit":
                         count = 1
                         data[index] = mbus_client.read_coils(tag_register[index], count, unit=1)
+                        register = data[index].bits[0]
                     elif tag.var_type == "float":
                         count = 2
                         data[index] = mbus_client.read_holding_registers(tag_register[index], count, unit=1)
-                    if tag.var_type == "int":
-                        register = data[index].registers[0]
-                    if tag.var_type == "bit":
-                        register = data[index].bits[0]
-                    elif tag.var_type == "float":
                         decoder = BinaryPayloadDecoder.fromRegisters(data[index].registers, Endian.Big, wordorder=Endian.Little)
                         register = decoder.decode_32bit_float()
-                    myData[index].set_value(register)
+                    # read function
+                    if myData[index].get_value() != check[index]:
+                        if tag.var_type == "int":
+                            mbus_client.write_registers(int(tag.register), int(myData[index].get_value()), unit=1)
+                        elif tag.var_type == "bit":
+                            mbus_client.write_coils(int(tag.register), int(myData[index].get_value()), unit=1)
+                        elif tag.var_type == "float":
+                            builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
+                            builder.add_32bit_float(float(myData[index].get_value()))
+                            payload = builder.to_registers()
+                            mbus_client.write_registers(int(tag.register), payload)
+                    elif register != check[index]:
+                        myData[index].set_value(register)
+                    check[index] = register
                     i = index + 1 + n_objects
                     node = "ns=2;i=" + str(i)
                     print(node)
@@ -382,7 +394,7 @@ class TcpClientOPCServer(Resource):
 
         policyIDs = ["Username"]
         server.set_security_IDs(policyIDs)
-        server.user_manager.set_user_manager(OPCUAServer.user_manager)
+        server.user_manager.set_user_manager(TcpClientOPCServer.user_manager)
 
         objects = server.get_objects_node()
 
@@ -395,6 +407,8 @@ class TcpClientOPCServer(Resource):
         tag_name = [None] * n_tags
         object_name = [None] * n_objects
         opc_objects = [None] * n_objects
+        check = [0] * n_tags
+        data = [None] * n_tags
         # populating our address space
         for tag in distinct_objs:
             object_name[obj_index] = tag.opc_object
@@ -405,10 +419,10 @@ class TcpClientOPCServer(Resource):
             for opc_obj in opc_objects:
                 if tag.opc_object == object_name[obj_index]:
                     if tag.var_type == "float":
-                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1.1)
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 0.1, varianttype=ua.VariantType.Float)
                         tag_name[index].set_writable()
                     else:
-                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 1)
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 0)
                         tag_name[index].set_writable()
                 obj_index += 1
             index += 1
@@ -418,20 +432,38 @@ class TcpClientOPCServer(Resource):
         try:
             while True:
                 index = 0
+                register = None
                 for tag in tags:
                     myData = tag_name[index].get_value()
                     mbus_client = ModbusTcpClient(tag.slave_ip, 502)
                     mbus_client.connect()
+                    # read function
                     if tag.var_type == "int":
-                        mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
+                        count = 1
+                        data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        register = data[index].registers[0]
                     elif tag.var_type == "bit":
-                        mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
+                        count = 1
+                        data[index] = mbus_client.read_coils(int(tag.register), count, unit=1)
+                        register = data[index].bits[0]
                     elif tag.var_type == "float":
-                       
-                         print(myData)builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
-                        builder.add_32bit_float(float(myData))
-                        payload = builder.to_registers()
-                        mbus_client.write_registers(int(tag.register), payload)
+                        count = 2
+                        data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
+                        decoder = BinaryPayloadDecoder.fromRegisters(data[index].registers, Endian.Big, wordorder=Endian.Little)
+                        register = decoder.decode_32bit_float()
+                    if register != check[index]:
+                        tag_name[index].set_value(register)
+                    elif myData != check[index]:
+                        if tag.var_type == "int":
+                            mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
+                        elif tag.var_type == "bit":
+                            mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
+                        elif tag.var_type == "float":
+                            builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
+                            builder.add_32bit_float(float(myData))
+                            payload = builder.to_registers()
+                            mbus_client.write_registers(int(tag.register), payload, unit=int(tag.unit_id))
+                    check[index] = register
                     mbus_client.close()
         finally:
             #close connection, remove subcsriptions, etc
@@ -445,7 +477,6 @@ class OPCUAServer(Resource):
             if username == user.name and password == user.password:
                 return True
         return False
-        #return username in test_list and password == test_list[username]
 
     def post(self):
         server = Server()
@@ -477,8 +508,12 @@ class OPCUAServer(Resource):
         for tag in tags:
             for opc_obj in opc_objects:
                 if tag.opc_object == object_name[obj_index]:
-                    tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 0)
-                    tag_name[index].set_writable()
+                    if tag.var_type == "float":
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 0, varianttype=ua.VariantType.Float)
+                        tag_name[index].set_writable()
+                    else:
+                        tag_name[index] = opc_obj.add_variable(idx, str(tag.name), 0)
+                        tag_name[index].set_writable()
                 obj_index += 1
             index += 1
             obj_index = 0
@@ -501,9 +536,11 @@ class OPCUAServer(Resource):
 app = Flask(__name__)
 
 # databases instance
-app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/tcp_to_opc.sqlite3'
-app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/opc_to_tcp.sqlite3'
-app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/user.sqlite3'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/tcp_to_opc.sqlite3'
+app.config['SQLALCHEMY_BINDS'] = {
+    "opc_to_tcp": "sqlite:///db/opc_to_tcp.sqlite3",
+    "users": "sqlite:///db/userdb.sqlite3"
+    }
 db = SQLAlchemy(app)
 
 # api and resources instance
@@ -535,6 +572,7 @@ class TCP_to_OPC_Tags(db.Model):
 # OPC UA to modbus TCP tags database
 # --------------------------------------------------------------------------- #
 class OPC_to_TCP_Tags(db.Model):
+    __bind_key__ = 'opc_to_tcp'
     id = db.Column('tag_id', db.Integer, primary_key = True)
     name = db.Column(db.String(100))
     register = db.Column(db.String(10))  
@@ -555,6 +593,7 @@ class OPC_to_TCP_Tags(db.Model):
 # User database
 # --------------------------------------------------------------------------- #
 class UserDB(db.Model):
+    __bind_key__ = 'users'
     id = db.Column('tag_id', db.Integer, primary_key = True)
     name = db.Column(db.String(100))
     password = db.Column(db.String(100))
@@ -848,6 +887,9 @@ def boot(event):
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     db.create_all()
+    #user = UserDB("admin", "admin")
+    #db.session.add(user)
+    #db.session.commit()
     event = multiprocessing.Event()
     p = Process(target=boot, args=(event,))
     p.start()
