@@ -371,7 +371,7 @@ class OPCUAClient(Resource):
                                 mbus_client.write_registers(int(tag.register), int(myData[index].get_value()), unit=1)
                         elif tag.var_type == "bit":
                             if tag.opc_object == "CO":
-                                mbus_client.write_coils(int(tag.register), int(myData[index].get_value()), unit=1)
+                                mbus_client.write_coil(int(tag.register), int(myData[index].get_value()), unit=1)
                         elif tag.var_type == "float":
                             builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
                             builder.add_32bit_float(float(myData[index].get_value()))
@@ -473,15 +473,19 @@ class TcpClientOPCServer(Resource):
                             data[index] = mbus_client.read_holding_registers(int(tag.register), count, unit=1)
                         decoder = BinaryPayloadDecoder.fromRegisters(data[index].registers, Endian.Big, wordorder=Endian.Little)
                         register = decoder.decode_32bit_float()
+
+                    # check variable
                     if register != check[index]:
                         tag_name[index].set_value(register)
+
+                    # write function    
                     elif myData != check[index]:
                         if tag.var_type == "int":
                             if tag.opc_object == "HR":
                                 mbus_client.write_registers(int(tag.register), int(myData), unit=int(tag.unit_id))
                         elif tag.var_type == "bit":
                             if tag.opc_object == "CO":
-                                mbus_client.write_coils(int(tag.register), int(myData), unit=int(tag.unit_id))
+                                mbus_client.write_coil(int(tag.register), bool(myData), unit=int(tag.unit_id))
                         elif tag.var_type == "float":
                             builder = BinaryPayloadBuilder(byteorder=Endian.Big, wordorder=Endian.Little)
                             builder.add_32bit_float(float(myData))
@@ -490,6 +494,7 @@ class TcpClientOPCServer(Resource):
                                 mbus_client.write_registers(int(tag.register), payload, unit=int(tag.unit_id))
                     check[index] = register
                     mbus_client.close()
+                    #index += 1
         finally:
             #close connection, remove subcsriptions, etc
             server.stop()
