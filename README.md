@@ -1,18 +1,22 @@
-# Gateway entre Modbus TCP e OPC UA
+# Gateway between Modbus TCP e OPC UA
 
-Protótipo de um gateway open source entre Modbus TCP e OPC UA desenvolvido em Python como Trabalho de Conclusão de Curso em Engenharia Mecatrônica.
+Prototype of an open source gateway between Modbus TCP protocol and OPC UA developed using Python as a project for Final Paper in my Mechatronics Engineering graduation.
 
-O gateway suporta conversões tanto de Modbus para OPC UA quanto de OPC UA para Modbus, e de quebra ainda possui funcionalidade de conversão entre Modbus TCP e Modbus RTU. Além disso, possui uma interface gráfica para configuração de parâmetros.
+It is able to convert both Modbus to OPC UA and OPC UA to Modbus data structure and communication parameters and also has a feature that converts Modbus TCP to serial based and vice versa. Besides, it has a simple HTML based user interface for parameter configuration and mode selection.
 
-Por ora, a aplicação foi testada apenas em Windows.
+For now, the application is Windows only.
 
-## Dependências
+## Dependencies
 
-Para que o código seja compilado corretamente, é necessário instalar algumas dependências, conforme a lista abaixo:
+For the code to be properly compiled, there are some necessary dependencies. Besides of Python itself, the following packages are needed:
 
 pymodbus: pip install pymodbus  
 Free OPC UA: pip install opcua
 
-## Execução
+## Execution
 
-Para inicializar o gateway, é necessário baixar o repositório e executar o comando py api.py através do cmd dentro da pasta local.
+To start the application, simply use the command py api.py with cmd within the folder it is downloaded. The user interface can be accessed at localhost in any web browser.
+
+## Further Development
+
+It was intended for the application to run embedded in a Raspberry Pi, but due to time limitations related to finishing the final paper, it was not developed. Feel free to try though.
