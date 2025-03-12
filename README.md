@@ -1,4 +1,4 @@
-# Gateway between Modbus TCP e OPC UA
+# Gateway between Modbus TCP and OPC UA
 
 Prototype of an open source gateway between Modbus TCP protocol and OPC UA developed using Python as a project for Final Paper in my Mechatronics Engineering graduation.
 
